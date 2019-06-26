@@ -47,12 +47,19 @@ public struct Request {
     
     // MARK: Parameter Encodings
     
+    public enum ParameterEncodingTransformer {
+        case URL((_ url: URL, _ parameters: [String : Any]) -> URL?)
+        case body((_ parameters: [String : Any]) -> Data?, contentType: String)
+    }
+    
     /// A `ParameterEncoding` value defines how to encode request parameters
     public enum ParameterEncoding {
         /// Encode parameters with percent encoding
         case percent
         /// Encode parameters as JSON
         case json
+        /// Custom encoding
+        case custom(transformer: ParameterEncodingTransformer)
         
         /**
          Encode query parameters in an existing URL.
@@ -70,6 +77,15 @@ public struct Request {
             case .json:
                 assertionFailure("Cannot encode URL parameters using JSON encoding")
                 return nil // <-- unreachable
+                
+            case .custom(let transformer):
+                switch transformer {
+                case .URL(let converter):
+                    return converter(url, parameters)
+                case .body:
+                    assertionFailure("Cannot custom encode URL parameters using ParameterEncodingTransformer.Body")
+                    return nil // <-- unreachable
+                }
             }
         }
         
@@ -85,6 +101,14 @@ public struct Request {
                 return parameters.percentEncodedQueryString(with: allowedCharacters)?.data(using: String.Encoding.utf8, allowLossyConversion: false)
             case .json:
                 return try? JSONSerialization.data(withJSONObject: parameters, options: JSONSerialization.WritingOptions())
+            case .custom(let transformer):
+                switch transformer {
+                case .URL:
+                    assertionFailure("Cannot custom encode Body using ParameterEncodingTransformer.URL")
+                    return nil // <-- unreachable
+                case .body(let converter, _):
+                    return converter(parameters as [String : AnyObject]) as Data?
+                }
             }
         }
     }
@@ -98,13 +122,13 @@ public struct Request {
         public static let cacheControl = "Cache-Control"
     }
     
-    /// A group of static constants for referencing supported HTTP 
+    /// A group of static constants for referencing supported HTTP
     /// `Content-Type` header values.
     public struct ContentType {
         public static let formEncoded = "application/x-www-form-urlencoded"
         public static let json = "application/json"
     }
-        
+
     /// The HTTP method of the request.
     public let method: Method
     
@@ -123,7 +147,7 @@ public struct Request {
 
     /**
      The parameters to encode in the HTTP request. Request parameters are percent
-     encoded and are appended as a query string or set as the request body 
+     encoded and are appended as a query string or set as the request body
      depending on the HTTP request method.
     */
     // TODO: remove `parameters` in 4.0.0
@@ -152,7 +176,7 @@ public struct Request {
     public var formParametersAllowedCharacters: CharacterSet? = nil
 
     /**
-     The HTTP header fields of the request. Each key/value pair represents a 
+     The HTTP header fields of the request. Each key/value pair represents a
      HTTP header field value using the key as the field name.
     */
     var headers = [String : String]()
@@ -163,8 +187,15 @@ public struct Request {
     /// The type of parameter encoding to use when encoding request parameters.
     public var parameterEncoding = ParameterEncoding.percent {
         didSet {
-            if parameterEncoding == .json {
+            switch parameterEncoding {
+            case .percent:
+            break // nothing to see here, move along
+            case .json:
                 contentType = ContentType.json
+            case .custom(let transformer):
+                if case let .body(_, customContentType) = transformer {
+                    contentType = customContentType
+                }
             }
         }
     }

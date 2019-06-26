@@ -40,9 +40,13 @@ import Foundation
     /// A closure that will be used to asynchronously create the data for the request body.
     private var bodyProvider: AsyncDataProvider?
 
-    lazy fileprivate var urlRequest: URLRequest = {
-        return self.request.urlRequestValue as URLRequest
-    }()
+    fileprivate var urlRequest: URLRequest {
+        return request.urlRequestValue as URLRequest
+    }
+
+    public var url: URL? {
+        return urlRequest.url
+    }
     
     /// Dispatch queue that queues up and dispatches handler blocks
     fileprivate let handlerQueue: OperationQueue
@@ -486,8 +490,8 @@ extension ServiceTask {
     }
 
     /**
-     Add a handler that runs on the main thread and is responsible for updating 
-     the UI with a given value. The handler is only called if a previous response 
+     Add a handler that runs on the main thread and is responsible for updating
+     the UI with a given value. The handler is only called if a previous response
      handler in the chain does **not** return a `.Failure` value.
      
      If a response handler returns a value via ServiceTaskResult.Value the
